@@ -1,0 +1,76 @@
+//Receiver code
+#include <SPI.h>
+#include <nRF24L01.h>
+#include <RF24.h>
+#include <TinyGPS.h>
+#include <SoftwareSerial.h>
+ 
+//Let's declare the CE and CSN pins
+#define CE_PIN 9
+#define CSN_PIN 10
+ 
+//Variable with the address of the channel to be read
+byte direccion[5] ={'c','a','n','a','l'}; 
+
+//we create the radio object (NRF24L01)
+RF24 radio(CE_PIN, CSN_PIN);
+
+//vector for received data
+float datos[10];
+
+void setup()
+{
+ //we initialize the NRF24L01
+  radio.begin();
+  //inicializamos el puerto serie
+  Serial.begin(9600); 
+  
+  //We open the Reading channel
+  radio.openReadingPipe(1, direccion);
+  
+    //we started listening to the channel
+  radio.startListening();
+ 
+}
+ 
+void loop() {
+ uint8_t numero_canal;
+ //if ( radio.available(&numero_canal) )
+ if ( radio.available() )
+ {    
+     //We read the data and save it in the variable data[]
+     radio.read(datos, sizeof(datos));
+     
+     //we report the received data through the serial port
+     Serial.println("");
+     Serial.print(" Temp: "); 
+     Serial.println(datos[0]); 
+     Serial.print(" Press: "); 
+     Serial.println(datos[1]); 
+     Serial.print(" High "); 
+     Serial.println(datos[2]);
+     Serial.print(" Humidity "); 
+     Serial.println(datos[3]); 
+     /*Serial.print(" Alx: "); 
+     Serial.println(datos[4]);1
+     Serial.println(datos[5]);
+     Serial.print(" Alz "); 
+     Serial.println(datos[6]); 
+     Serial.print(" Aax: "); 
+     Serial.println(datos[7]); 
+     Serial.print(" Aay: "); 
+     Serial.println(datos[8]);*/
+     Serial.print(" LAT: "); 
+     Serial.println(datos[9] == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : datos[9], 6); 
+     Serial.print(" LON: "); 
+     Serial.println(datos[10] == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : datos[10], 6); 
+     Serial.println("");
+     
+ }
+  else
+  {
+    Serial.println("No hay datos de radio disponibles"); //There is no radio values 
+    }
+ 
+ delay(100);
+}
