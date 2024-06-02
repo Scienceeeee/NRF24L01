@@ -1,0 +1,124 @@
+//Transmitter code
+#include<Adafruit_BMP085.h>
+#include<SPI.h>
+#include<RF24.h>
+#include<nRF24L01.h>
+#include "I2Cdev.h"
+#include "MPU6050.h"
+#include "Wire.h"
+#include<DHT.h>
+#include <SoftwareSerial.h>
+#include <TinyGPS.h>
+
+int dhtPin = 2;                         //DHT11 digital pin
+int TX = 3;                             //TX neo-6m pin
+int RX = 4;                             //RX neo-6m pin
+
+Adafruit_BMP085 bmp;                    //Object for the BMP-180
+MPU6050 sensor;                         // MPU6050 initialize
+DHT dht(dhtPin,DHT11);                  //DHT11 object
+TinyGPS gps;                            // We create the object with which we are going to manage the GPS
+SoftwareSerial gps_com(RX, TX);           // We indicate the pins that we are going to use for communications with the GPS for TX and RX
+
+//RAW (unprocessed) values ​​of the accelerometer and gyroscope in the x,y,z axes
+int ax, ay, az;
+int gx, gy, gz;
+float flat, flon;
+ 
+
+//Declaremos los pines CE y el CSN
+#define CE_PIN 9
+#define CSN_PIN 10
+ 
+//Variable con la dirección del canal por donde se va a transmitir
+byte direccion[5] ={'c','a','n','a','l'};
+
+//creamos el objeto radio (NRF24L01)
+RF24 radio(CE_PIN, CSN_PIN);
+
+//vector con los datos a enviar
+float datos[10];
+
+void setup() {
+  radio.begin();
+  Serial.begin(9600);
+  gps_com.begin(9600);
+  radio.openWritingPipe(direccion);
+  if (!bmp.begin()) {
+  Serial.println("No se pudo encontrar al sensor BMP085 , revisar cableado");
+  while (1) {}
+  }
+  if (sensor.testConnection()) Serial.println("Sensor iniciado correctamente");
+  else Serial.println("Error al iniciar el sensor");
+  dht.begin();
+}
+
+
+void loop() {
+ bool newData = false;
+ sensor.getAcceleration(&ax, &ay, &az);
+ sensor.getRotation(&gx, &gy, &gz);
+
+for (unsigned long start = millis(); millis() - start < 1000;)
+  {
+    while (gps_com.available())
+    {
+      char c = gps_com.read();
+      if (gps.encode(c))             // Comprobamos si lo que recibimos del gps es válido y contiene los datos de la geolocalización.
+        newData = true;              // Ponemos la variable newData a true si los datos recibidos del gps ya pueden tratarse para que se muestren 
+    }
+  }
+
+  if (newData)
+  {
+    gps.f_get_position(&flat, &flon);       // Obtenemos los datos y se los pasamos a las variables declaradas anteriormente
+  }
+
+//cargamos los datos en la variable datos[]
+ datos[0] = bmp.readTemperature();
+ datos[1] = bmp.readPressure();
+ datos[2] = bmp.readAltitude();
+ datos[3] = dht.readHumidity();
+ datos[4] = ax * (9.81/16384.0);
+ datos[5] = ay * (9.81/16384.0);
+ datos[6] = az * (9.81/16384.0);
+ datos[7] = atan(ax/sqrt(pow(ay,2) + pow(az,2)))*(180.0/3.14);
+ datos[8] = atan(ay/sqrt(pow(ax,2) + pow(az,2)))*(180.0/3.14);
+ datos[9] =  flat;
+ datos[10] = flon;
+ //enviamos los datos
+ bool ok = radio.write(datos, sizeof(datos));
+  //reportamos por el puerto serial los datos enviados 
+  if(ok)
+  {
+     Serial.print(" Temp: "); 
+     Serial.println(datos[0]); 
+     Serial.print(" Press: "); 
+     Serial.println(datos[1]); 
+     Serial.print(" High "); 
+     Serial.println(datos[2]);
+     Serial.print(" Hum "); 
+     Serial.println(datos[3]); 
+     /*Serial.print(" Alx: "); 
+     Serial.println(datos[4]);
+     Serial.print(" Aly: "); 
+     Serial.println(datos[5]);
+     Serial.print(" Alz "); 
+     Serial.println(datos[6]); 
+     Serial.print(" Aax: "); 
+     Serial.println(datos[7]); 
+     Serial.print(" Aay: "); 
+     Serial.println(datos[8]);*/ 
+     Serial.print(" LAT: ");
+     Serial.println(datos[9] == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : datos[9], 6);
+     Serial.print(" LON: ");
+     Serial.println(datos[10] == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : datos[10], 6);
+     Serial.println("");
+     Serial.println("");
+  }
+  else
+  {
+     Serial.println("no se ha podido enviar");
+  }
+  delay(100);
+}
